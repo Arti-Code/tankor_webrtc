@@ -16,7 +16,7 @@ const BIN2: u8 = 19;
 const STBY: u8 = 6;
 
 
-pub struct Motors2 {
+pub struct Motors {
     gpio: Gpio,
     pwma: OutputPin,
     ain1: OutputPin,
@@ -27,7 +27,7 @@ pub struct Motors2 {
     stby: OutputPin,
 }
 
-pub fn new_motors() -> Motors2 {
+pub fn new_motors() -> Motors {
     let gpio = Gpio::new().unwrap();
     let ain1 = gpio.get(AIN1).unwrap().into_output();
     let ain2 = gpio.get(AIN2).unwrap().into_output();
@@ -36,62 +36,69 @@ pub fn new_motors() -> Motors2 {
     let bin2 = gpio.get(BIN2).unwrap().into_output();
     let stby = gpio.get(STBY).unwrap().into_output();
     let pwmb = gpio.get(PWMB).unwrap().into_output();
-    Motors2 { gpio: gpio, pwma: pwma, ain1: ain1, ain2: ain2, pwmb: pwmb, bin1: bin1, bin2: bin2, stby: stby }
+    Motors { gpio: gpio, pwma: pwma, ain1: ain1, ain2: ain2, pwmb: pwmb, bin1: bin1, bin2: bin2, stby: stby }
 }
 
-pub fn prepare(motors: &mut Motors2) {
-    motors.pwma.set_pwm_frequency(50.0, 1.0);
-    motors.pwmb.set_pwm_frequency(50.0, 1.0);
+pub fn stop(motors: &mut Motors) {
     motors.ain1.set_low();
     motors.ain2.set_low();
     motors.bin1.set_low();
     motors.bin2.set_low();
-    motors.stby.set_low();
-}
-
-pub fn stop(motors: &mut Motors2) {
-    motors.ain1.set_low();
-    motors.ain2.set_low();
-    motors.bin1.set_low();
-    motors.bin2.set_low();
+    println!("STOP @inside");
 }    
 
-pub fn front(motors: &mut Motors2) {
+pub fn right(motors: &mut Motors) {
     motors.ain1.set_high();
     motors.ain2.set_low();
     motors.bin1.set_high();
     motors.bin2.set_low();
+    println!("RIGHT @inside");
 }
 
-pub fn back(motors: &mut Motors2) {
+pub fn left(motors: &mut Motors) {
     motors.ain1.set_low();
     motors.ain2.set_high();
     motors.bin1.set_low();
     motors.bin2.set_high();
+    println!("LEFT @inside");
 }
 
-pub fn left(motors: &mut Motors2) {
+pub fn front(motors: &mut Motors) {
     motors.ain1.set_high();
     motors.ain2.set_low();
     motors.bin1.set_low();
     motors.bin2.set_high();
+    println!("FRONT @inside");
 }
 
-pub fn right(motors: &mut Motors2) {
+pub fn back(motors: &mut Motors) {
     motors.ain1.set_low();
     motors.ain2.set_high();
     motors.bin1.set_high();
     motors.bin2.set_low();
+    println!("BACK @inside");
 }
 
-pub fn finish(motors: &mut Motors2) {
-    motors.pwma.clear_pwm();
-    motors.pwmb.clear_pwm();
+pub fn finish(motors: &mut Motors) {
+    _ = motors.pwma.clear_pwm();
+    _ = motors.pwmb.clear_pwm();
     motors.stby.set_low();
+    println!("FINISH @inside");
+}
+
+pub fn prepare(motors: &mut Motors) {
+    _ = motors.pwma.set_pwm_frequency(50.0, 1.0);
+    _ = motors.pwmb.set_pwm_frequency(50.0, 1.0);
+    motors.ain1.set_low();
+    motors.ain2.set_low();
+    motors.bin1.set_low();
+    motors.bin2.set_low();
+    motors.stby.set_high();
+    println!("PREPARE @inside");
 }
 
 //#[derive(Clone)]
-pub struct Motors {
+/* pub struct Motors {
     gpio: Gpio,
     pwma: OutputPin,
     ain1: OutputPin,
@@ -169,4 +176,4 @@ impl Motors {
     }
 
 
-}
+} */
