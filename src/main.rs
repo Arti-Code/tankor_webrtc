@@ -1,6 +1,6 @@
-//mod motor;
+mod motor;
 
-//use std::env::args;
+use clap::Parser;
 use anyhow::Result;
 use webrtc::ice_transport::ice_credential_type::RTCIceCredentialType;
 use std::sync::Arc;
@@ -8,8 +8,10 @@ use std::time::Duration;
 use std::env;
 use tokio::time::sleep;
 use tokio::net::{UdpSocket};
+use serde::{Serialize, Deserialize};
+use firebase_rs::*;
+use base64::{Engine as _, engine::{general_purpose}};
 use webrtc::api::interceptor_registry::register_default_interceptors;
-use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_VP8};
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
@@ -23,18 +25,23 @@ use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
+//use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_VP8};
+use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 //use webrtc::rtp_transceiver::rtp_sender;
-//use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
 //use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
-use serde::{Serialize, Deserialize};
-use firebase_rs::*;
-use base64::{Engine as _, engine::{general_purpose}};
-//use rppal::gpio::*;
-//use crate::motor::*;
+use rppal::gpio::*;
+use crate::motor::*;
 
 //const DB_REF: &str = "https://rtp-to-webrtc-default-rtdb.firebaseio.com";
 const DB_REF: &str = "https://my-killer-bot-default-rtdb.europe-west1.firebasedatabase.app";
 const DEVICE: &str = "tankor";
+
+#[derive(Parser, Debug)]
+#[command(device)]
+struct Arguments {
+    #[arg(short, long, default_value_t="tankor")]
+    device: String,
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Answer {
@@ -62,20 +69,17 @@ impl Device {
 }
 
 fn main() {
+    let args = Arguments::parse();
     loop {
-        run().unwrap();
+        run(args.device).unwrap();
     }
 }
 
 #[tokio::main]
-async fn run() -> Result<()> {
-    //let args_list = env::args().collect();
-    //let params = Params::new(&args_list);
+async fn run(device_name: String) -> Result<()> {
     prog_intro().await;
-    let sock = UdpSocket::bind("0.0.0.0:5004").await.unwrap();
-    let listener = Arc::new(sock);
-
-    let device: Device = create_device(DEVICE).await;
+    let listener = create_video_listener().await;
+    let device: Device = create_device(&device_name).await;
     let mut m = MediaEngine::default();
     m.register_default_codecs()?;
     let mut registry = Registry::new();
@@ -85,30 +89,10 @@ async fn run() -> Result<()> {
         .with_interceptor_registry(registry)
         .build();
     restart_info(&device).await; 
-    let config = RTCConfiguration {
-        /* ice_servers: vec![RTCIceServer {
-            urls: vec!["stun:stun.l.google.com:19302".to_owned()],
-            ..Default::default()
-        }], */
-
-        ice_servers: vec![RTCIceServer {
-            urls: vec!["stun:fr-turn1.xirsys.com".to_owned()],
-            username: "23Xgr3XVCOk2GqoZW5eWhbdXM1EfA8VcC6OVVacJSpFdoljTUOsTcgAoFUvfN4vcAAAAAGNFN29nd296ZHlrMg==".to_owned(),
-            credential: "2ed490ce-4947-11ed-bd3d-0242ac120004".to_owned(),
-            credential_type: RTCIceCredentialType::default(),
-        }],
-        ..Default::default()
-    };
+    let config = create_rtcconfig().await;
 
     let peer_connection = Arc::new(api.new_peer_connection(config).await?);
-    let video_track = Arc::new(TrackLocalStaticRTP::new(
-        RTCRtpCodecCapability {
-            mime_type: MIME_TYPE_VP8.to_owned(),
-            ..Default::default()}, 
-        "robot_cam".to_owned(), 
-        "robot_stream".to_owned(), 
-    ));
-    
+    let video_track = create_video().await;
     let rtp_sender = peer_connection
         .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>).await?;
     
@@ -123,8 +107,7 @@ async fn run() -> Result<()> {
     let done_tx1 = done_tx.clone();
     let (_data_tx, mut _data_rx) = tokio::sync::mpsc::channel::<()>(5);
     let (drive_tx, mut drive_rx) = tokio::sync::mpsc::channel::<&str>(10);
-    peer_connection
-    .on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
+    peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let drive_tx1 = drive_tx.clone();
         let d_label = d.label().to_owned();
         Box::pin(async move {
@@ -136,131 +119,114 @@ async fn run() -> Result<()> {
             }));
             
             d.on_message(Box::new(move |msg: DataChannelMessage| {
-                    let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
-                    let drive_tx2 = drive_tx1.clone();
-                    println!("[↓]: {}", msg_str);
-                    if msg_str=="front" {
-                        _ = drive_tx2.try_send("front");
-                    }
-                    else if msg_str=="back" {
-                        //println!("sending");
-                        _ = drive_tx2.try_send("back");
-                    }
-                    else if msg_str=="left" {
-                        //println!("sending");
-                        _ = drive_tx2.try_send("left");
-                    }
-                    else if msg_str=="right" {
-                        //println!("sending");
-                        _ = drive_tx2.try_send("right");
-                    }
-                    else if msg_str=="stop" {
-                        //println!("sending");
-                        _ = drive_tx2.try_send("stop");
-                    }
-                    Box::pin(async {})
-                }));
-            })
-        }));
-
-    tokio::spawn(async move {
-        //let mut motors = new_motors();
-        //prepare(&mut motors);
-        while let Some(cmd) = drive_rx.recv().await {
-            println!("{}", cmd);
-            //if cmd=="front" {
-            //    front(&mut motors);
-            //} else if cmd=="stop" {
-            //    stop(&mut motors);
-            //} else if cmd=="back" {
-            //    back(&mut motors);
-            //} else if cmd=="left" {
-            //    left(&mut motors);
-            //} else if cmd=="right" {
-            //    right(&mut motors);
-            //}
-        }
-        //finish(&mut motors);
-        //println!("FINISH MOTORS");
-    });
-
-    peer_connection
-        .on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
-            println!("[ICE CONNECTION]: {}", connection_state);
-            if connection_state == RTCIceConnectionState::Disconnected {
-                let _ = done_tx1.try_send(());
-            }
-            if connection_state == RTCIceConnectionState::Failed {
-                let _ = done_tx1.try_send(());
-            }
-            Box::pin(async {})
-        })
-    );
-    
-        let done_tx2 = done_tx.clone();
-    
-        peer_connection
-            .on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
-                println!("[PEER CONNECTION]: {}", s);
-                if s == RTCPeerConnectionState::Failed {
-                    let _ = done_tx2.try_send(());
+                let cmd = String::from_utf8(msg.data.to_vec()).unwrap();
+                let drive_tx2 = drive_tx1.clone();
+                println!("[↓]: {}", cmd);
+                if cmd=="front" {
+                    _ = drive_tx2.try_send("front");
+                }
+                else if cmd=="back" {
+                    _ = drive_tx2.try_send("back");
+                }
+                else if cmd=="left" {
+                    _ = drive_tx2.try_send("left");
+                }
+                else if cmd=="right" {
+                    _ = drive_tx2.try_send("right");
+                }
+                else if cmd=="stop" {
+                    _ = drive_tx2.try_send("stop");
                 }
                 Box::pin(async {})
-            })
-        );
-        
-        
-        let offer_encoded = wait_offer(device.get_name()).await;
-        let desc_data = decode(&offer_encoded);
-        let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
-        peer_connection.set_remote_description(offer).await?;
-        let answer = peer_connection.create_answer(None).await?;
-    
-        let mut gather_complete = peer_connection.gathering_complete_promise().await;
-        peer_connection.set_local_description(answer).await?;
-        let _ = gather_complete.recv().await;
-    
-        if let Some(local_desc) = peer_connection.local_description().await {
-            send_answer(&local_desc, device.get_name()).await;
-        } else {
-            println!("[ANSWER]: failed!");
-        }
-        let done_tx3 = done_tx.clone();
-        
-        let l = Arc::clone(&listener);
-        tokio::spawn(async move {
-            let mut inbound_rtp_packet = vec![0u8; 4096]; // UDP MTU
-            while let Ok((n, _)) = l.recv_from(&mut inbound_rtp_packet).await {
-                if let Err(err) = video_track.write(&inbound_rtp_packet[..n]).await {
-                    if Error::ErrClosedPipe == err {
-                    } else {
-                        println!("[VIDEO]: error: {}", err);
-                    }
-                    let _ = done_tx3.try_send(());
-                    return;
-                }
-            }
-        });
-    
-        tokio::select! {
-            _ = done_rx.recv() => {
-                println!("[SIGNAL]: done");
-            }
-            _ = tokio::signal::ctrl_c() => {
-                println!("");
-            }
-        };
+            }));
+        })
+    }));
 
-        //let trans = peer_connection.get_transceivers().await;
-        //let mut i = 0;
-        //for _ in trans.iter() {
-            //println!("transceivers: {}", i);
-            //i += 1;
-        //}
-        peer_connection.remove_track(&rtp_sender2).await.unwrap();
-        peer_connection.close().await?;
-        //finish(engines);
-        println!("[CONNECTION] close");
+    tokio::spawn(async move {
+        let mut motors = new_motors();
+        prepare(&mut motors);
+        while let Some(cmd) = drive_rx.recv().await {
+            if cmd=="front" {
+                front(&mut motors);
+            } else if cmd=="stop" {
+                stop(&mut motors);
+            } else if cmd=="back" {
+                back(&mut motors);
+            } else if cmd=="left" {
+                left(&mut motors);
+            } else if cmd=="right" {
+                right(&mut motors);
+            }
+        }
+        finish(&mut motors);
+        println!("[MOTORS]: STOPPED");
+    });
+
+    peer_connection.on_ice_connection_state_change(Box::new(move |connection_state: RTCIceConnectionState| {
+        println!("[ICE CONNECTION]: {}", connection_state);
+        if connection_state == RTCIceConnectionState::Disconnected {
+            let _ = done_tx1.try_send(());
+        }
+        if connection_state == RTCIceConnectionState::Failed {
+            let _ = done_tx1.try_send(());
+        }
+        Box::pin(async {})
+    }));
+    
+    let done_tx2 = done_tx.clone();
+
+    peer_connection.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
+        println!("[PEER CONNECTION]: {}", s);
+        if s == RTCPeerConnectionState::Failed {
+            let _ = done_tx2.try_send(());
+        }
+        Box::pin(async {})
+    }));
+    
+    let offer_encoded = wait_offer(device.get_name()).await;
+    let desc_data = decode(&offer_encoded);
+    let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
+    peer_connection.set_remote_description(offer).await?;
+    let answer = peer_connection.create_answer(None).await?;
+
+    let mut gather_complete = peer_connection.gathering_complete_promise().await;
+    peer_connection.set_local_description(answer).await?;
+    let _ = gather_complete.recv().await;
+
+    if let Some(local_desc) = peer_connection.local_description().await {
+        send_answer(&local_desc, device.get_name()).await;
+    } else {
+        println!("[ANSWER]: failed!");
+    }
+    let done_tx3 = done_tx.clone();
+    
+    let l = Arc::clone(&listener);
+    tokio::spawn(async move {
+        let mut inbound_rtp_packet = vec![0u8; 4096]; // UDP MTU
+        while let Ok((n, _)) = l.recv_from(&mut inbound_rtp_packet).await {
+            if let Err(err) = video_track.write(&inbound_rtp_packet[..n]).await {
+                if Error::ErrClosedPipe == err {
+                } else {
+                    println!("[VIDEO]: error: {}", err);
+                }
+                let _ = done_tx3.try_send(());
+                return;
+            }
+        }
+    });
+    
+    tokio::select! {
+        _ = done_rx.recv() => {
+            println!("[PROCESS]: done");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            println!("[PROCESS]: CTRL+C by user");
+        }
+    };
+
+    peer_connection.remove_track(&rtp_sender2).await.unwrap();
+    peer_connection.close().await?;
+    println!("[CONNECTION] close");
     Ok(())
 }
 
@@ -282,6 +248,38 @@ async fn prog_intro() {
 async fn create_device(name: &str) -> Device {
     let device: Device = Device::new(name);
     device
+}
+
+async fn create_video_listener() -> Arc<UdpSocket> {
+    let sock = UdpSocket::bind("0.0.0.0:5004").await.unwrap();
+    Arc::new(sock)
+}
+
+async fn create_rtcconfig() -> RTCConfiguration {
+    RTCConfiguration {
+        /* ice_servers: vec![RTCIceServer {
+            urls: vec!["stun:stun.l.google.com:19302".to_owned()],
+            ..Default::default()
+        }], */
+
+        ice_servers: vec![RTCIceServer {
+            urls: vec!["stun:fr-turn1.xirsys.com".to_owned()],
+            username: "23Xgr3XVCOk2GqoZW5eWhbdXM1EfA8VcC6OVVacJSpFdoljTUOsTcgAoFUvfN4vcAAAAAGNFN29nd296ZHlrMg==".to_owned(),
+            credential: "2ed490ce-4947-11ed-bd3d-0242ac120004".to_owned(),
+            credential_type: RTCIceCredentialType::default(),
+        }],
+        ..Default::default()
+    }
+}
+
+async fn create_video() -> Arc<TrackLocalStaticRTP> {
+    Arc::new(TrackLocalStaticRTP::new(
+        RTCRtpCodecCapability {
+            mime_type: MIME_TYPE_H264.to_owned(),
+            ..Default::default()}, 
+        "robot_cam".to_owned(), 
+        "robot_stream".to_owned(), 
+    ))
 }
 
 async fn restart_info(device: &Device) {
