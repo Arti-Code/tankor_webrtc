@@ -1,6 +1,6 @@
 [package]
-name = "tankor"
-version = "0.2.2"
+name = "commander"
+version = "0.3.4"
 edition = "2021"
 authors = ["Artur Gwoździowski"]
 
@@ -26,4 +26,4 @@ base64 = "0.21.0"
 openssl-src = "300.0.12"
 openssl = { version = "0.10", features = ["vendored"] }
 rppal = "0.14.1"
-clap = "4.1.8"
+clap = { version = "4.1.8", features = ["derive"] }
