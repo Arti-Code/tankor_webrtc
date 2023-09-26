@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 /* use rppal::gpio::{Gpio, OutputPin};
+=======
+use rppal::gpio::{Gpio, OutputPin};
+>>>>>>> 8131b0d30e716f0c079d5ec4e793baa2a9e5ebd3
 
 //? const PWMA: u8 = 16;
 //? const AIN1: u8 = 21;
@@ -100,4 +104,4 @@ impl Motors {
     }
 
 
-} */
+}

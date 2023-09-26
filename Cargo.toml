@@ -24,6 +24,11 @@ rand = "0.8.5"
 firebase-rs = "2.0.5"
 base64 = "0.21.0"
 openssl-src = "300.0.12"
+<<<<<<< HEAD
 openssl = { version = "0.10.57" }
 #rppal = "0.14.1"
+=======
+openssl = { version = "0.10", features = ["vendored"] }
+rppal = "0.14.1"
+>>>>>>> 8131b0d30e716f0c079d5ec4e793baa2a9e5ebd3
 clap = { version = "4.1.8", features = ["derive"] }
