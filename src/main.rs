@@ -2,20 +2,17 @@ mod emulator;
 
 use clap::Parser;
 use anyhow::Result;
-<<<<<<< HEAD
 use webrtc::api::media_engine::MIME_TYPE_VP8;
-=======
->>>>>>> 8131b0d30e716f0c079d5ec4e793baa2a9e5ebd3
 //use webrtc::ice_transport::ice_credential_type::RTCIceCredentialType;
 use std::sync::Arc;
 use std::time::Duration;
 use std::env;
 use std::thread;
 use tokio::time::sleep;
-use tokio::net::{UdpSocket};
+use tokio::net::UdpSocket;
 use serde::{Serialize, Deserialize};
 use firebase_rs::*;
-use base64::{Engine as _, engine::{general_purpose}};
+use base64::{Engine as _, engine::general_purpose};
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
@@ -30,14 +27,8 @@ use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
-use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264};
-<<<<<<< HEAD
+use webrtc::api::media_engine::{MediaEngine, /* MIME_TYPE_H264 */};
 use crate::emulator::*;
-
-
-=======
-use crate::motor::*;
->>>>>>> 8131b0d30e716f0c079d5ec4e793baa2a9e5ebd3
 
 
 
