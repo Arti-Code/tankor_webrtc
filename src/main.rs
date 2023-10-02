@@ -1,19 +1,21 @@
 mod emulator;
 
-use clap::Parser;
-use anyhow::Result;
-use webrtc::api::media_engine::MIME_TYPE_VP8;
-//use webrtc::ice_transport::ice_credential_type::RTCIceCredentialType;
 use std::sync::Arc;
 use std::time::Duration;
 use std::env;
 use std::thread;
+
 use tokio::time::sleep;
 use tokio::net::UdpSocket;
 use serde::{Serialize, Deserialize};
 use firebase_rs::*;
 use base64::{Engine as _, engine::general_purpose};
+
+use anyhow::Result;
+use clap::Parser;
+
 use webrtc::api::interceptor_registry::register_default_interceptors;
+use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_VP8 /* MIME_TYPE_H264 */};
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_message::DataChannelMessage;
 use webrtc::data_channel::RTCDataChannel;
@@ -27,14 +29,14 @@ use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
-use webrtc::api::media_engine::{MediaEngine, /* MIME_TYPE_H264 */};
+
 use crate::emulator::*;
 
 
 
 //const DB_REF: &str = "https://rtp-to-webrtc-default-rtdb.firebaseio.com";
-const DB_REF: &str = "https://my-killer-bot-default-rtdb.europe-west1.firebasedatabase.app";
 //const DEVICE: &str = "commander";
+const DB_REF: &str = "https://my-killer-bot-default-rtdb.europe-west1.firebasedatabase.app";
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -49,7 +51,7 @@ struct Offer {
 
 #[derive(Parser, Debug)]
 struct Arguments {
-    #[arg(short, long, default_value_t=String::from("autobot"))]
+    #[arg(short, long, default_value_t=String::from("tankor"))]
     device: String,
 }
 
@@ -102,21 +104,22 @@ async fn run(device_name: String) -> Result<bool> {
     let config = create_rtcconfig().await;
 
     let peer_connection = Arc::new(api.new_peer_connection(config).await?);
-    let video_track = create_video().await;
+    let video_track = create_video();
     let rtp_sender = peer_connection
         .add_track(Arc::clone(&video_track) as Arc<dyn TrackLocal + Send + Sync>).await?;
     
     let rtp_sender2 = rtp_sender.clone();
     tokio::spawn(async move {
-        let mut rtcp_buf = vec![0u8; 4096];
+        //let mut rtcp_buf = vec![0u8; 4096];
+        let mut rtcp_buf = vec![0u8; 1500];
         while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
         Result::<()>::Ok(())
     });
 
-    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(5);
+    let (done_tx, mut done_rx) = tokio::sync::mpsc::channel::<()>(1);
     let done_tx1 = done_tx.clone();
-    let (_data_tx, mut _data_rx) = tokio::sync::mpsc::channel::<()>(5);
-    let (drive_tx, mut drive_rx) = tokio::sync::mpsc::channel::<&str>(10);
+    let (_data_tx, mut _data_rx) = tokio::sync::mpsc::channel::<()>(1);
+    let (drive_tx, mut drive_rx) = tokio::sync::mpsc::channel::<&str>(1);
     peer_connection.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
         let drive_tx1 = drive_tx.clone();
         let d_label = d.label().to_owned();
@@ -194,6 +197,9 @@ async fn run(device_name: String) -> Result<bool> {
     
     let offer_encoded = wait_offer(device.get_name()).await;
     let desc_data = decode(&offer_encoded);
+    println!("====================");
+    println!("{:?}", &desc_data);
+    println!("====================");
     let offer = serde_json::from_str::<RTCSessionDescription>(&desc_data)?;
     peer_connection.set_remote_description(offer).await?;
     let answer = peer_connection.create_answer(None).await?;
@@ -249,10 +255,9 @@ async fn prog_intro() {
     let author = env!("CARGO_PKG_AUTHORS");
     let version = env!("CARGO_PKG_VERSION");
     println!("*** {} ***", app_name);
-    wait(1).await;
-    println!("version {}", version);
-    wait(1).await;
-    println!("made by {} ®2023", author);
+    println!("ver. {}", version);
+    println!("by {} ®2023", author);
+    wait(3).await;
 }
 
 async fn create_device(name: &str) -> Device {
@@ -282,7 +287,7 @@ async fn create_rtcconfig() -> RTCConfiguration {
     }
 }
 
-async fn create_video() -> Arc<TrackLocalStaticRTP> {
+fn create_video() -> Arc<TrackLocalStaticRTP> {
     Arc::new(TrackLocalStaticRTP::new(
         RTCRtpCodecCapability {
             mime_type: MIME_TYPE_VP8.to_owned(),
@@ -309,7 +314,7 @@ async fn wait_offer(device: &str) -> String {
         let encod = firebase.get::<String>().await;
         match encod  {
             Ok(v) if v != "" => {
-                println!("wait: {}", v);
+                //println!("wait: {}", v);
                 offer_b64 = v;
                 offer_founded = true;
                 let firebase2 = Firebase::new(DB_REF)
