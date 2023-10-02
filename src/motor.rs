@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-/* use rppal::gpio::{Gpio, OutputPin};
-=======
 use rppal::gpio::{Gpio, OutputPin};
->>>>>>> 8131b0d30e716f0c079d5ec4e793baa2a9e5ebd3
 
 //? const PWMA: u8 = 16;
 //? const AIN1: u8 = 21;
@@ -40,6 +36,7 @@ pub struct Motors {
 }
 
 impl Motors {
+
     pub fn new() -> Motors {
         let gpio = Gpio::new().unwrap();
         let ain1 = gpio.get(AIN1).unwrap().into_output();
@@ -102,6 +99,5 @@ impl Motors {
         _ = self.pwmb.clear_pwm();
         self.stby.set_low();
     }
-
 
 }

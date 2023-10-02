@@ -1,4 +1,4 @@
-mod motor;
+mod emulator;
 
 use clap::Parser;
 use anyhow::Result;
@@ -28,7 +28,7 @@ use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::{TrackLocal, TrackLocalWriter};
 use webrtc::Error;
 use webrtc::api::media_engine::{MediaEngine, /* MIME_TYPE_H264 */};
-use crate::motor::*;
+use crate::emulator::*;
 
 
 
@@ -185,7 +185,7 @@ async fn run(device_name: String) -> Result<bool> {
     let done_tx2 = done_tx.clone();
 
     peer_connection.on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
-        println!("<y>[PEER CONNECTION]: {}</>", s);
+        println!("[PEER CONNECTION]: {}", s);
         if s == RTCPeerConnectionState::Failed {
             let _ = done_tx2.try_send(());
         }
@@ -205,7 +205,7 @@ async fn run(device_name: String) -> Result<bool> {
     if let Some(local_desc) = peer_connection.local_description().await {
         send_answer(&local_desc, device.get_name()).await;
     } else {
-        println!("<r>[ANSWER]: failed!</>");
+        println!("[ANSWER]: failed!");
     }
     let done_tx3 = done_tx.clone();
     
